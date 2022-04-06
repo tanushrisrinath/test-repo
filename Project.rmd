@@ -1,6 +1,6 @@
 ---
 title: "Mid-term project"
-author: "TANUSHRI SRINATH"
+author: "TANUSHRI SRINATH UNM"
 output:
   html_document:
     df_print: paged
