@@ -1,0 +1,270 @@
+---
+title: "Mid-term project"
+author: "TANUSHRI SRINATH"
+output:
+  html_document:
+    df_print: paged
+  pdf_document: default
+---
+
+```{r}
+#Load Data
+potato <- read.table("C:/Users/tanus/Desktop/ANOVA/Midterm Project/Potato data.txt", header = TRUE)
+n <- nrow(potato)
+n
+```
+
+
+```{r}
+#Re-label and As Factor 
+potato$regime <- factor(potato$regime, label = c("R", "C"))
+potato$variety <- factor(potato$variety, label = c("S1", "S2"))
+potato$temp <- factor(potato$temp, label = c("-4", "-8"))
+attach(potato)
+potato[1:10,]
+```
+
+```{r}
+#Summary Statistics
+tapply(leak,regime,mean)
+tapply(leak,variety,mean)
+tapply(leak,potato$temp,mean)
+```
+
+```{r}
+#Cell mean 
+aggregate(leak ~ variety + regime + potato$temp, data = potato, mean)
+
+```
+
+```{r}
+#Length of each cell
+aggregate(leak ~ variety + regime + potato$temp, data = potato, length)
+```
+
+WRITE WHY OBSERVATIONS ARE MISSING, IS IT BECAUSE OF FACTORS OR MISSING AT RANDOM?
+
+```{r}
+#Boxplots for each variable 
+par(mfrow = c(1,3))
+boxplot(leak ~ variety, data = potato, xlab = "Variety", ylab = "Mean damage score for leak")
+boxplot(leak ~ regime, data = potato, xlab = "Regime", ylab = "Mean damage score for leak")
+boxplot(leak ~ potato$temp, data = potato, xlab = "Temp", ylab = "Mean damage score for leak")
+```
+The boxplots above help us to study the variance in each of the variable simultaneously. We see that the tempertature boxplot with temperatures -4 and -8 do not have much difference in the variance when compared to the differences in Variety or Regime.
+
+
+```{r}
+par(mfrow = c(1,1))
+boxplot(leak ~ variety:regime:potato$temp, data = potato, xlab = "V:R:T", ylab = "Mean score of leak")
+
+```
+These boxplots show the 8 possible combinations from the variables given. The plots show differences when each species of plant is put into different regimes and temperatures and how they react. For instance, when variety 1 (S1)is put into -8 degrees from a room temperature setting, has a better and less variance than other settings as seen. 
+
+
+```{r}
+interaction.plot(regime, variety:potato$temp, leak, type = 'b', col = 1:4, pch = 1:4)
+```
+
+The interaction plot shows that the black line (S1:-4), green line (S2:-4) and blue line (S2:-8) follow same direction interpreting that the plant species when first conditioned in room temperature and later put into cold temperature, have higher damage score for ion leakage than those first conditioned in cold temperature and put into colder temperature. The damage in the latter case won't be significant because the plants have already been conditioned to cold temperatures and the increase won't cause drastic damage to ion leakage.
+The red line (S1:-8) has an upward direction.
+
+
+```{r}
+#Fitting Full Model
+myfit0 <- lm(leak ~ variety * regime * temp)
+anova(myfit0)
+```
+
+```{r}
+library(car)
+```
+
+
+```{r}
+myfit1 <- lm(leak ~ variety*regime*temp, contrasts = c(variety=contr.sum, regime=contr.sum, temp=contr.sum))
+Anova(myfit1, type = 3)
+```
+
+According to the Anova table, we see that the 3 way interaction "variety:regime:temp" is not significant with respect to the p-value. This is also the characteristics of variety:temp and regime:temp where the p-values are not significant. 
+
+```{r}
+aggregate(leak ~ variety + potato$temp, data = potato, mean)
+```
+
+
+```{r}
+#Least Square Means
+#Residual degrees of freedom = 75 - 8 = 67
+library(lsmeans)
+lsmeans(myfit1, list(pairwise ~ variety*temp), adjust = "bonferroni")
+
+```
+
+The lsmeans function enables us to find average of cell means we found in earlier steps.
+There is difference between the regular cell mean of each combination versus the lsmeans.
+For instance, in the case of S1:-4, the regular cell mean is 2.79, however, the lsmeans is average of 3.872(S1:R:-4) and 2.339(S1:C:-4). 
+
+```{r}
+lsmeans(myfit1, list(pairwise ~ variety*temp*regime), adjust = "bonferroni")
+
+```
+
+
+```{r}
+#Residual Analysis
+qqPlot(myfit1$residuals, las = 1, main = "QQ Plot")
+
+```
+
+The QQ Plot here shows that the normality assumption is fine and not drastically violated except for a small deviation at 57 & 58 observation. However, they fall within 95% Confidence Interval.
+
+
+```{r}
+#Normality Test
+#Shapiro-Wilk Normality Test
+shapiro.test(myfit1$resid)
+```
+
+The p-value from the Normality Test is 0.03256, which is clsoe to the significant value α= 0.05. Therefore, the normality assumption is not violated.
+
+```{r}
+plot(myfit1$fitted, myfit1$residuals, xlab = "Fitted", ylab = "Residuals")
+```
+
+The plot fitted v.s residual is neither too random nor very clustered. It can be accepted with a slight deviation in constant variance assumption.
+
+```{r}
+#Brown-Forsythe Test for homogeneity of error variance
+leveneTest(leak ~ variety*temp*regime, data = potato)
+```
+
+The test is done to check the violation of constant variance assumption from p-value aspect. Here, the p-value is not significant, hence, we reject null hypothesis leading to conclusion that the assumption has been violated.
+
+```{r}
+#Check for Outliers
+outlierTest(myfit1)
+```
+
+Observation #58 is an outlier. 
+
+```{r}
+potato[58,]
+```
+
+We adopt boxcox transformation at this point, because, the assumptions above are violated. 
+In the process, we remove interactions that are not significant, one by one and see if the reduced model is better than the full model or otherwise. 
+
+```{r}
+#Box Cox Transformation
+min(leak)
+#Make response positive
+#leak <- leak+2
+myfit2 <- lm(leak+2 ~ variety*regime*temp, contrasts = c(variety=contr.sum, regime=contr.sum, temp=contr.sum))
+```
+
+The minimum of "leak" is -1.11. We need to make the response a positive one to transform and fit a model, so we add "2" to each observation of "leak". 
+
+```{r}
+library(MASS)
+bx <- boxcox(myfit2, lambda = seq(-5, 5, length = 10))
+bxlm <- bx$x[which.max(bx$y)]
+bxlm
+```
+
+With the box cox transformation, we see that the value of lambda is 0.182, close to 0, so the transformation does not help. 
+
+```{r}
+leak <- leak+2
+leak1 <- log(leak)
+myfit3<-lm(leak1~variety*regime*temp,contrasts = c(variety=contr.sum, 
+                                                   regime=contr.sum,temp=contr.sum))
+boxcox(myfit3, lambda = seq(-5, 5, length = 10))
+```
+
+```{r}
+qqPlot(myfit3$residuals, las = 1, main="QQ Plot")
+shapiro.test(myfit3$resid)
+
+plot(myfit3$fitted,myfit3$res,xlab="Fitted",ylab="Residuals")
+```
+
+
+```{r}
+#Reduced Model
+Anova(myfit3, type = 3)
+```
+
+We fit a reduced model of Type III SS to study which interaction should be removed, one by one.
+Here we see the 3 way interaction is not significant, so we remove it in the next step.
+
+
+```{r}
+myfit4 <- lm(leak1 ~ variety+regime+temp+variety:temp+variety:regime+temp:regime, contrasts = c(variety=contr.sum, regime=contr.sum, temp=contr.sum))
+anova(myfit3, myfit4)
+
+```
+
+The p-value of the reduced model is 0.2965, hence, do not reject the reduced model.
+
+
+```{r}
+Anova(myfit4, type = 3)
+```
+
+The p-value of the reduced model (variety:temp) is 0.5158, hence, this is not significant too. We remove it in the next step.
+
+
+```{r}
+myfit5 <- lm(leak1 ~ variety+regime+potato$temp+variety:regime+regime:potato$temp, contrasts = c(variety=contr.sum, regime=contr.sum, temp=contr.sum))
+Anova(myfit5, type = 3)
+```
+
+In this table, we see regime:temp to not be significant, however, we do not remove it, because regime as a variable is significant.
+
+
+
+```{r}
+#Residual Analysis
+qqPlot(myfit5$residuals, las = 1, main = "QQ Plot")
+plot(myfit5$fitted.values, myfit5$residuals, xlab = "Fitted", ylab = "Residuals")
+```
+
+The QQ Plot continues to show that the normality assumption is not violated with now observation 57&58 being well within the 95% confidence interval. 
+The plot Fitted v.s Residuals is similar to the full model with neither being too random nor too clustered and can be accepted.
+
+```{r}
+#Check for Outliers
+outlierTest(myfit5)
+```
+
+
+FINAL MODEL : Leak ~ Variety + Regime + Temp + Variety:Regime + Regime:Temp
+
+
+```{r}
+comp1 <- lsmeans(myfit5, pairwise ~ variety:regime, adjust = "Tukey")
+CLD(comp1, alpha = 0.05, Letters=letters)
+```
+
+The groups are grouped to similar ones as 'a' 'a' 'a' and 'b'
+
+
+Lsmean damage score for ion leakage for Species 2 conditioned at room temperature previously is significantly higher (worse adaptability) than other combinations of factor levels of variety and regime. 
+
+
+With the above pairwise comparison in the Variety:Regime interaction, we see that Species 1 when first conditioned in room temperature and then put to cold temperature, it has better adaptability than those in Species 1 conditioned in cold temperature first and put to colder temperature.
+Species 2 when first conditioned in cold temperature and put to colder temperature has better adaptability than those in Species 2 conditioned in room temperature and put to cold temperature.
+This conclusion can be made through the values of lsmeans. 
+
+```{r}
+comp2 <- lsmeans(myfit5, pairwise ~ regime:temp, adjust = "Tukey")
+CLD(comp1, alpha = 0.05, Letters=letters)
+```
+
+
+
+
+
+
+
